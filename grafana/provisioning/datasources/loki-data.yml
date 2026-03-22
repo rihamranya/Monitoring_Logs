@@ -1,0 +1,12 @@
+apiVersion: 1
+datasources:
+  - name: loki
+    type: loki
+    url: http://loki:3100
+    jsonData:
+      derivedFields:
+        - datasourceUid: jaeger
+          matcherRegex: "" # Non nécessaire car type Label
+          name: TraceId
+          labelName: trace_id
+          url: 'http://localhost:16686/trace/${__value.raw}'

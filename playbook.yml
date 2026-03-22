@@ -1,0 +1,27 @@
+---
+- name: Automatisation Totale Observabilite
+  hosts: monitoring_server
+  become: yes
+  tasks:
+    - name: Installation de Docker et Docker Compose
+      apt:
+        name: [docker.io, docker-compose-v2]
+        state: present
+        update_cache: yes
+
+    - name: Creation du dossier de destination
+      file:
+        path: /opt/monitoring-app
+        state: directory
+        mode: '0755'
+
+    - name: Copie de tout ton projet (Configs + Docker)
+      copy:
+        src: ./ 
+        dest: /opt/monitoring-app/
+        mode: '0755'
+
+    - name: Lancement du Stack
+      command: docker compose up -d
+      args:
+        chdir: /opt/monitoring-app
