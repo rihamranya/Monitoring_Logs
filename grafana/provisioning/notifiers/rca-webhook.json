@@ -1,0 +1,10 @@
+{
+  "uid": "rca-webhook-channel",
+  "name": "RCA Service Webhook",
+  "type": "webhook",
+  "settings": {
+    "url": "http://rca-service:8000/webhook/grafana",
+    "httpMethod": "POST"
+  },
+  "secureFields": {}
+}

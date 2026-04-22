@@ -1,0 +1,144 @@
+services:  
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - network-cires
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    networks:
+      - network-cires
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: mailhog
+    ports:
+      - "1025:1025"  # SMTP port
+      - "8025:8025"  # Web UI
+    networks:
+      - network-cires
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    environment:
+      - OLLAMA_NUM_THREAD=8
+      - OLLAMA_KEEP_ALIVE=24h
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep -q ollama || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - network-cires
+
+  rca-service:
+    build:
+      context: ./rca-service
+      dockerfile: Dockerfile
+    container_name: rca-service
+    ports:
+      - "8090:8000"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - PROMETHEUS_URL=http://prometheus:9090
+      - LOKI_URL=http://loki:3100
+      - JAEGER_URL=http://jaeger:16686
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:0.5b}
+      - LLM_TIMEOUT=${LLM_TIMEOUT:-420}
+      - OLLAMA_NUM_PREDICT=${OLLAMA_NUM_PREDICT:-192}
+      - OLLAMA_TEMPERATURE=${OLLAMA_TEMPERATURE:-0.0}
+      - OLLAMA_MAX_CONCURRENCY=${OLLAMA_MAX_CONCURRENCY:-1}
+      - OLLAMA_RETRY_ATTEMPTS=${OLLAMA_RETRY_ATTEMPTS:-2}
+      - OLLAMA_CIRCUIT_FAIL_THRESHOLD=${OLLAMA_CIRCUIT_FAIL_THRESHOLD:-3}
+      - OLLAMA_CIRCUIT_COOLDOWN_SECONDS=${OLLAMA_CIRCUIT_COOLDOWN_SECONDS:-120}
+      - SMTP_HOST=mailhog
+      - SMTP_PORT=1025
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-rca@monitoring.local}
+      - NOTIFICATION_EMAIL=${NOTIFICATION_EMAIL:-oncall@monitoring.local}
+      - SMTP_USE_TLS=${SMTP_USE_TLS:-false}
+      - SMTP_REQUIRE_AUTH=${SMTP_REQUIRE_AUTH:-false}
+      - ALERT_PROCESSING_TIMEOUT=${ALERT_PROCESSING_TIMEOUT:-600}
+      - SOURCE_TIMEOUT_SECONDS=${SOURCE_TIMEOUT_SECONDS:-8}
+      - CONTEXT_LOOKBACK_MINUTES=${CONTEXT_LOOKBACK_MINUTES:-15}
+      - DB_PATH=${DB_PATH:-/app/rca_history.db}
+      - LOG_LEVEL=INFO
+      - DRAIN3_CORRELATION_WINDOW_SECONDS=${DRAIN3_CORRELATION_WINDOW_SECONDS:-180}
+      - TRIAGE_HISTORY_LOOKBACK_MINUTES=${TRIAGE_HISTORY_LOOKBACK_MINUTES:-15}
+      # Comma-separated substrings to suppress when seen in correlated Drain3 templates.
+      - TRIAGE_NOISE_PATTERNS=${TRIAGE_NOISE_PATTERNS:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+      loki:
+        condition: service_started
+      prometheus:
+        condition: service_started
+      jaeger:
+        condition: service_started
+      ollama:
+        condition: service_healthy
+    networks:
+      - network-cires
+    volumes:
+      - ./rca-service:/app
+
+  drain3-producer:
+    build:
+      context: ./drain3-producer
+      dockerfile: Dockerfile
+    container_name: drain3-producer
+    environment:
+      - LOKI_URL=http://loki:3100
+      # Ajuste ce selector selon tes labels Loki (ex: {service_name="school-service"}).
+      - LOKI_QUERY=${DRAIN3_LOKI_QUERY:-{job=~".+"}}
+      - RCA_WEBHOOK_URL=http://rca-service:8000/webhook/drain3
+      - POLL_INTERVAL_SECONDS=${DRAIN3_POLL_INTERVAL_SECONDS:-10}
+      - LOOKBACK_SECONDS=${DRAIN3_LOOKBACK_SECONDS:-45}
+      - WINDOW_SECONDS=${DRAIN3_WINDOW_SECONDS:-120}
+      - NOTIFY_THRESHOLD=${DRAIN3_NOTIFY_THRESHOLD:-5}
+      - NOTIFY_COOLDOWN_SECONDS=${DRAIN3_NOTIFY_COOLDOWN_SECONDS:-180}
+      - MAX_LINES_PER_POLL=${DRAIN3_MAX_LINES_PER_POLL:-300}
+    depends_on:
+      loki:
+        condition: service_started
+      rca-service:
+        condition: service_started
+    networks:
+      - network-cires
+
+volumes:
+  redis-data:
+  prometheus-data:
+  grafana-storage:
+  ollama-data:
+
+networks:
+  network-cires:
+    driver: bridge
