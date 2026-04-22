@@ -136,10 +136,10 @@ class EscalationService:
         top_issues = _top_log_issues(context)
         slow_span = _slowest_span_summary(context)
         quick_links = _quick_links(context)
-        links_html = "".join(
-            f'<li><a href="{url}" target="_blank" rel="noopener noreferrer">{label}</a></li>'
-            for label, url in quick_links.items()
-        ) or "<li>Aucun lien disponible</li>"
+        # links_html = "".join(
+        #     f'<li><a href="{url}" target="_blank" rel="noopener noreferrer">{label}</a></li>'
+        #     for label, url in quick_links.items()
+        # ) or "<li>Aucun lien disponible</li>"
         
         html_body = f"""
 <!DOCTYPE html>
@@ -326,12 +326,12 @@ Evidence: {", ".join(decision.evidence)}</div>
             ''' if context.traces else '<p>Aucune trace collectée</p>'}
         </div>
 
-        <div class="card">
-            <h2>🔗 Liens rapides</h2>
-            <ul>
-                {links_html}
-            </ul>
-        </div>
+        # <div class="card">
+        #     <h2>🔗 Liens rapides</h2>
+        #     <ul>
+        #         {links_html}
+        #     </ul>
+        # </div>
         
         <div class="footer">
             <p>Message automatique généré par le système RCA Monitoring</p>
